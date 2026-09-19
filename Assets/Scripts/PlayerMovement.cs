@@ -3,20 +3,22 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     public float speed = 5f;
+    public float cameraAngle = 45f; // musi pasować do Rotation Y kamery
 
     void Update()
     {
-        // Odczytujemy input z klawiatury (A/D lub strzałki = horizontal, W/S = vertical)
-        float horizontal = Input.GetAxis("Horizontal");
-        float vertical = Input.GetAxis("Vertical");
+        // GetAxisRaw = brak wygładzania, natychmiastowa reakcja
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        float vertical = Input.GetAxisRaw("Vertical");
 
-        // Budujemy kierunek ruchu na podstawie inputu
         Vector3 kierunek = new Vector3(horizontal, 0f, vertical);
-
-        // normalized, żeby ruch po skosie nie był szybszy niż na wprost
         kierunek = kierunek.normalized;
 
-        // Przesuwamy gracza
-        transform.position += kierunek * speed * Time.deltaTime;
+        // Obracamy kierunek ruchu o kąt kamery,
+        // żeby W = "w górę ekranu" z perspektywy izo
+        Quaternion obrot = Quaternion.Euler(0f, cameraAngle, 0f);
+        Vector3 kierunekIzo = obrot * kierunek;
+
+        transform.position += kierunekIzo * speed * Time.deltaTime;
     }
 }
