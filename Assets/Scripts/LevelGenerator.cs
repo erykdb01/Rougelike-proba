@@ -4,11 +4,14 @@ using System.Collections.Generic;
 public class LevelGenerator : MonoBehaviour
 {
     public GameObject floorPrefab;
+    public Transform player;
     public int gridWidth = 40;
     public int gridHeight = 40;
     public int roomCount = 6;
-    public int roomMinSize = 4;
-    public int roomMaxSize = 8;
+    public int roomMinSize = 6;
+    public int roomMaxSize = 14;
+    public GameObject enemyPrefab;
+    public float minEnemyDistanceFromPlayer = 15f;
 
     private bool[,] grid;
     private List<RectInt> rooms = new List<RectInt>();
@@ -19,21 +22,60 @@ public class LevelGenerator : MonoBehaviour
         GenerateRooms();
         ConnectRooms();
         DrawLevel();
+        PlacePlayer();
+        SpawnEnemy();
     }
 
     void GenerateRooms()
     {
+        int maxAttempts = 100;
+
         for (int i = 0; i < roomCount; i++)
         {
-            int w = Random.Range(roomMinSize, roomMaxSize);
-            int h = Random.Range(roomMinSize, roomMaxSize);
-            int x = Random.Range(1, gridWidth - w - 1);
-            int y = Random.Range(1, gridHeight - h - 1);
+            RectInt newRoom = new RectInt();
+            bool validPlacement = false;
+            int attempts = 0;
 
-            RectInt newRoom = new RectInt(x, y, w, h);
-            rooms.Add(newRoom);
-            CarveRoom(newRoom);
+            while (!validPlacement && attempts < maxAttempts)
+            {
+                int w = Random.Range(roomMinSize, roomMaxSize);
+                int h = Random.Range(roomMinSize, roomMaxSize);
+                int x = Random.Range(1, gridWidth - w - 1);
+                int y = Random.Range(1, gridHeight - h - 1);
+
+                newRoom = new RectInt(x, y, w, h);
+
+                if (!RoomOverlapsAny(newRoom))
+                {
+                    validPlacement = true;
+                }
+
+                attempts++;
+            }
+
+            if (validPlacement)
+            {
+                rooms.Add(newRoom);
+                CarveRoom(newRoom);
+            }
         }
+    }
+
+    bool RoomOverlapsAny(RectInt room)
+    {
+        RectInt roomWithBuffer = new RectInt(
+            room.x - 1, room.y - 1,
+            room.width + 2, room.height + 2
+        );
+
+        foreach (RectInt existingRoom in rooms)
+        {
+            if (roomWithBuffer.Overlaps(existingRoom))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     void CarveRoom(RectInt room)
@@ -57,22 +99,36 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
+    public int corridorWidth = 2;
+
     void CarveCorridor(Vector2Int a, Vector2Int b)
     {
         int x = a.x;
         int y = a.y;
 
-        // najpierw idziemy w poziomie
         while (x != b.x)
         {
-            grid[x, y] = true;
+            CarveThickPoint(x, y);
             x += (b.x > x) ? 1 : -1;
         }
-        // potem w pionie
         while (y != b.y)
         {
-            grid[x, y] = true;
+            CarveThickPoint(x, y);
             y += (b.y > y) ? 1 : -1;
+        }
+    }
+
+    void CarveThickPoint(int centerX, int centerY)
+    {
+        for (int x = centerX; x < centerX + corridorWidth; x++)
+        {
+            for (int y = centerY; y < centerY + corridorWidth; y++)
+            {
+                if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight)
+                {
+                    grid[x, y] = true;
+                }
+            }
         }
     }
 
@@ -89,5 +145,38 @@ public class LevelGenerator : MonoBehaviour
                 }
             }
         }
+    }
+
+    void PlacePlayer()
+    {
+        Vector2 center = rooms[0].center;
+        player.position = new Vector3(center.x, 1f, center.y);
+    }
+
+    void SpawnEnemy()
+    {
+        List<RectInt> validRooms = new List<RectInt>();
+
+        foreach (RectInt room in rooms)
+        {
+            float distance = Vector2.Distance(room.center, rooms[0].center);
+            if (distance >= minEnemyDistanceFromPlayer)
+            {
+                validRooms.Add(room);
+            }
+        }
+
+        if (validRooms.Count == 0)
+        {
+            Debug.Log("Brak pokoju wystarczająco daleko od gracza - pomijam spawn przeciwnika");
+            return;
+        }
+
+        RectInt chosenRoom = validRooms[Random.Range(0, validRooms.Count)];
+        Vector2 center = chosenRoom.center;
+        Vector3 spawnPos = new Vector3(center.x, 1f, center.y);
+
+        GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+        enemy.GetComponent<EnemyAI>().player = player;
     }
 }
